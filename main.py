@@ -88,14 +88,28 @@ def plot_results(y_test, predictions, model_name):
     plt.legend()
     plt.show()
 
+# Live Price Monitoring
+def monitor_live_prices(ticker):
+    stock = yf.Ticker(ticker)
+    live_data = stock.history(period='1d', interval='1m')
+    if not live_data.empty:
+        current_price = live_data['Close'].iloc[-1]
+        print(f"Current {ticker} price: ${current_price:.2f}")
+    return live_data
+
 # Main Function
 if __name__ == "__main__":
-    # Step 1: Load Data
+    # Step 1: Load Historical Data
     ticker = "SPY"  # SPY ETF
     start_date = "2015-01-01"
-    end_date = "2023-01-01"
+    end_date = pd.Timestamp.now().strftime('%Y-%m-%d')
     data = load_stock_data(ticker, start_date, end_date)
+    print("\nHistorical Data Preview:")
     print(data.head())
+    
+    # Live Price Monitoring
+    print("\nLive Price:")
+    live_data = monitor_live_prices(ticker)
 
     # Step 2: Preprocess Data
     X_train, X_test, y_train, y_test = preprocess_data(data)
@@ -115,3 +129,12 @@ if __name__ == "__main__":
     lstm_predictions = train_lstm(X_train, y_train, X_test, y_test)
     evaluate_model(y_test, lstm_predictions, "LSTM")
     plot_results(y_test, lstm_predictions, "LSTM")
+    
+    # Continuous Live Price Monitoring
+    print("\nStarting live price monitoring (Press Ctrl+C to stop)...")
+    try:
+        while True:
+            live_data = monitor_live_prices(ticker)
+            plt.pause(60)  # Update every minute
+    except KeyboardInterrupt:
+        print("\nLive monitoring stopped")
