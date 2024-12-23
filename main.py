@@ -45,30 +45,61 @@ def train_xgboost(X_train, y_train, X_test, y_test):
 
 # Train LSTM Model
 def train_lstm(X_train, y_train, X_test, y_test):
+    # Create sequences for LSTM
+    def create_sequences(X, y, time_steps=10):
+        Xs, ys = [], []
+        for i in range(len(X) - time_steps):
+            Xs.append(X[i:(i + time_steps)])
+            ys.append(y[i + time_steps])
+        return np.array(Xs), np.array(ys)
+
     scaler_X = MinMaxScaler()
     scaler_y = MinMaxScaler()
 
     X_train_scaled = scaler_X.fit_transform(X_train)
     X_test_scaled = scaler_X.transform(X_test)
-
     y_train_scaled = scaler_y.fit_transform(y_train.values.reshape(-1, 1))
+    y_test_scaled = scaler_y.transform(y_test.values.reshape(-1, 1))
 
-    # Reshape data for LSTM [samples, timesteps, features]
-    X_train_scaled = np.reshape(X_train_scaled, (X_train_scaled.shape[0], 1, X_train_scaled.shape[1]))
-    X_test_scaled = np.reshape(X_test_scaled, (X_test_scaled.shape[0], 1, X_test_scaled.shape[1]))
+    # Create sequences
+    X_train_seq, y_train_seq = create_sequences(X_train_scaled, y_train_scaled)
+    X_test_seq, y_test_seq = create_sequences(X_test_scaled, y_test_scaled)
 
+    # Build enhanced LSTM model
     model = Sequential([
-        LSTM(64, input_shape=(1, X_train.shape[1])),
+        LSTM(128, return_sequences=True, input_shape=(X_train_seq.shape[1], X_train_seq.shape[2])),
+        LSTM(64, return_sequences=False),
         Dense(32, activation='relu'),
+        Dense(16, activation='relu'),
         Dense(1)
     ])
 
     model.compile(optimizer='adam', loss='mse')
-    model.fit(X_train_scaled, y_train_scaled, epochs=10, batch_size=32, verbose=1)
+    
+    # Train with early stopping
+    from tensorflow.keras.callbacks import EarlyStopping
+    early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
+    
+    history = model.fit(
+        X_train_seq, y_train_seq,
+        epochs=50,
+        batch_size=32,
+        validation_split=0.1,
+        callbacks=[early_stopping],
+        verbose=1
+    )
 
-    predictions_scaled = model.predict(X_test_scaled)
+    # Make predictions
+    predictions_scaled = model.predict(X_test_seq)
     predictions = scaler_y.inverse_transform(predictions_scaled).flatten()
-    return predictions
+    
+    # Add movement direction prediction
+    pred_direction = np.where(np.diff(predictions) > 0, 1, -1)
+    actual_direction = np.where(np.diff(y_test[10:].values) > 0, 1, -1)
+    direction_accuracy = np.mean(pred_direction == actual_direction) * 100
+    print(f"\nPrice Movement Direction Accuracy: {direction_accuracy:.2f}%")
+    
+    return predictions[:-1]  # Adjust length to match test set
 
 # Evaluation
 def evaluate_model(y_test, predictions, model_name):
