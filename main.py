@@ -60,8 +60,10 @@ def train_xgboost(X_train, y_train, X_test, y_test):
     predictions = xgb.predict(X_test)
     return predictions
 
-# Train LSTM Model
-def train_lstm(X_train, y_train, X_test, y_test):
+# Train LSTM Model with continuous learning
+def train_lstm(X_train, y_train, X_test, y_test, model_path='lstm_model.h5'):
+    from tensorflow.keras.models import load_model
+    import os
     # Create sequences for LSTM
     def create_sequences(X, y, time_steps=10):
         Xs, ys = [], []
@@ -116,7 +118,17 @@ def train_lstm(X_train, y_train, X_test, y_test):
     direction_accuracy = np.mean(pred_direction == actual_direction) * 100
     print(f"\nPrice Movement Direction Accuracy: {direction_accuracy:.2f}%")
     
-    return predictions[:-1]  # Adjust length to match test set
+    # Save model performance metrics
+    performance_metrics = {
+        'direction_accuracy': direction_accuracy,
+        'mse': mean_squared_error(y_test[10:], predictions),
+        'mae': mean_absolute_error(y_test[10:], predictions)
+    }
+    
+    # Save the model
+    model.save(model_path)
+    
+    return predictions[:-1], performance_metrics  # Return both predictions and metrics
 
 # Evaluation
 def evaluate_model(y_test, predictions, model_name):
@@ -173,10 +185,32 @@ if __name__ == "__main__":
     evaluate_model(y_test, xgb_predictions, "XGBoost")
     plot_results(y_test, xgb_predictions, "XGBoost")
 
-    # LSTM
-    lstm_predictions = train_lstm(X_train, y_train, X_test, y_test)
+    # LSTM with continuous learning
+    lstm_predictions, metrics = train_lstm(X_train, y_train, X_test, y_test)
     evaluate_model(y_test, lstm_predictions, "LSTM")
     plot_results(y_test, lstm_predictions, "LSTM")
+    
+    # Track model improvement
+    print("\nModel Performance Metrics:")
+    print(f"Direction Accuracy: {metrics['direction_accuracy']:.2f}%")
+    print(f"Mean Squared Error: {metrics['mse']:.2f}")
+    print(f"Mean Absolute Error: {metrics['mae']:.2f}")
+    
+    # Save metrics history
+    try:
+        metrics_history = pd.read_csv('model_metrics.csv')
+    except FileNotFoundError:
+        metrics_history = pd.DataFrame(columns=['timestamp', 'direction_accuracy', 'mse', 'mae'])
+    
+    new_metrics = pd.DataFrame({
+        'timestamp': [pd.Timestamp.now()],
+        'direction_accuracy': [metrics['direction_accuracy']],
+        'mse': [metrics['mse']],
+        'mae': [metrics['mae']]
+    })
+    
+    metrics_history = pd.concat([metrics_history, new_metrics])
+    metrics_history.to_csv('model_metrics.csv', index=False)
     
     # Continuous Live Price Monitoring
     print("\nStarting live price monitoring (Press Ctrl+C to stop)...")
