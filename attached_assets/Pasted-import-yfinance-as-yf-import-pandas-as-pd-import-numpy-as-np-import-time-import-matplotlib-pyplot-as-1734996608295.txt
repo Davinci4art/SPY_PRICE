@@ -1,0 +1,163 @@
+import yfinance as yf
+import pandas as pd
+import numpy as np
+import time
+import matplotlib.pyplot as plt
+import seaborn as sns
+from scipy.signal import find_peaks
+import ta
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+
+def fetch_spy_data(interval="1m", period="1d"):
+    spy = yf.Ticker("SPY")
+    data = spy.history(interval=interval, period=period)
+    return data
+
+def prepare_features(data):
+    # Calculate technical indicators
+    data['MA50'] = data['Close'].rolling(window=50).mean()
+    data['MA200'] = data['Close'].rolling(window=200).mean()
+    data['RSI'] = ta.momentum.RSIIndicator(data['Close'], window=14).rsi()
+    macd = ta.trend.MACD(data['Close'])
+    data['MACD'] = macd.macd()
+    
+    # Create pattern labels
+    data['Pattern_Label'] = 0  # Default: No pattern
+    peaks, troughs = detect_peaks_and_troughs(data['Close'])
+    
+    # Pattern labeling
+    for i in range(len(data)-20):
+        if i in peaks:
+            data.iloc[i, data.columns.get_loc('Pattern_Label')] = 1  # Peak pattern
+        elif i in troughs:
+            data.iloc[i, data.columns.get_loc('Pattern_Label')] = 2  # Trough pattern
+    
+    return data
+
+def train_pattern_model(data):
+    data = data.dropna()
+    X = data[['RSI', 'MACD', 'MA50', 'MA200']]
+    y = data['Pattern_Label']
+    
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    
+    clf = RandomForestClassifier(n_estimators=100, random_state=42)
+    clf.fit(X_train, y_train)
+    
+    return clf, X_test, y_test
+
+def predict_patterns(clf, data):
+    features = data[['RSI', 'MACD', 'MA50', 'MA200']].dropna()
+    predictions = clf.predict(features)
+    return predictions
+
+def calculate_moving_averages(data):
+    data['MA50'] = data['Close'].rolling(window=50).mean()
+    data['MA200'] = data['Close'].rolling(window=200).mean()
+    return data
+
+def detect_peaks_and_troughs(prices):
+    peaks, _ = find_peaks(prices, distance=5)
+    troughs, _ = find_peaks(-prices, distance=5)
+    return peaks, troughs
+
+def detect_crossovers(data):
+    crossovers = []
+    for i in range(1, len(data)):
+        if data['MA50'].iloc[i] > data['MA200'].iloc[i] and data['MA50'].iloc[i-1] <= data['MA200'].iloc[i-1]:
+            crossovers.append((i, 'Golden Cross'))
+        elif data['MA50'].iloc[i] < data['MA200'].iloc[i] and data['MA50'].iloc[i-1] >= data['MA200'].iloc[i-1]:
+            crossovers.append((i, 'Death Cross'))
+    return crossovers
+
+def plot_data_with_indicators(data, peaks, troughs, predictions=None):
+    plt.figure(figsize=(12, 6))
+    plt.plot(data.index, data['Close'], label='Close Price', alpha=0.5, color='black')
+    plt.scatter(data.index[peaks], data['Close'].iloc[peaks], color='red', label='Peaks')
+    plt.scatter(data.index[troughs], data['Close'].iloc[troughs], color='green', label='Troughs')
+    
+    if predictions is not None:
+        pattern_indices = np.where(predictions != 0)[0]
+        plt.scatter(data.index[pattern_indices], 
+                   data['Close'].iloc[pattern_indices], 
+                   color='purple', 
+                   label='ML Detected Patterns',
+                   marker='*',
+                   s=100)
+    
+    if 'MA50' in data and 'MA200' in data:
+        plt.plot(data.index, data['MA50'], label='50-Day MA', linestyle='--', color='blue')
+        plt.plot(data.index, data['MA200'], label='200-Day MA', linestyle='-', color='orange')
+        
+        crossovers = detect_crossovers(data)
+        for idx, crossover_type in crossovers:
+            plt.axvline(x=data.index[idx], linestyle='--', 
+                       color='red' if 'Death' in crossover_type else 'green', alpha=0.6)
+            plt.text(data.index[idx], data['Close'].iloc[idx], crossover_type, 
+                    color='red' if 'Death' in crossover_type else 'green')
+    
+    plt.title("SPY Analysis with Technical Indicators and ML Patterns")
+    plt.xlabel("Time")
+    plt.ylabel("Price")
+    plt.legend()
+    plt.grid(alpha=0.3)
+    plt.show()
+
+def plot_distributions(data):
+    plt.figure(figsize=(12, 6))
+    sns.histplot(data['Close'].dropna(), kde=True, color='blue', alpha=0.6, bins=30)
+    plt.title("Distribution of SPY Closing Prices")
+    plt.xlabel("Price")
+    plt.ylabel("Frequency/Density")
+    plt.grid(alpha=0.3)
+    plt.show()
+
+def plot_crossovers(data):
+    plt.figure(figsize=(12, 6))
+    plt.plot(data.index, data['Close'], label='Close Price', alpha=0.5)
+    plt.plot(data.index, data['MA50'], label='50-Day MA', linestyle='--', color='blue')
+    plt.plot(data.index, data['MA200'], label='200-Day MA', linestyle='-', color='orange')
+    
+    crossovers = detect_crossovers(data)
+    for idx, crossover_type in crossovers:
+        plt.axvline(x=data.index[idx], linestyle='--', 
+                   color='red' if 'Death' in crossover_type else 'green', alpha=0.6)
+        plt.text(data.index[idx], data['Close'].iloc[idx], crossover_type, 
+                color='red' if 'Death' in crossover_type else 'green')
+    
+    plt.title("Moving Average Crossovers")
+    plt.xlabel("Time")
+    plt.ylabel("Price")
+    plt.legend()
+    plt.grid(alpha=0.3)
+    plt.show()
+
+def live_tracker(interval="1m", track_minutes=30):
+    print("Starting live tracking for SPY...")
+    start_time = time.time()
+    
+    # Initial data fetch and model training
+    data = fetch_spy_data(interval=interval, period="1d")
+    data = prepare_features(data)
+    model, _, _ = train_pattern_model(data)
+    
+    while time.time() - start_time < track_minutes * 60:
+        data = fetch_spy_data(interval=interval, period="1d")
+        data = prepare_features(data)
+        
+        peaks, troughs = detect_peaks_and_troughs(data['Close'])
+        predictions = predict_patterns(model, data)
+        crossovers = detect_crossovers(data)
+        
+        print(f"{time.ctime()} - Detected {len(crossovers)} crossovers")
+        print("ML Pattern Detection Active")
+        
+        plot_data_with_indicators(data, peaks, troughs, predictions)
+        plot_distributions(data)
+        plot_crossovers(data)
+        
+        time.sleep(60)
+
+if __name__ == "__main__":
+    live_tracker(interval="1m", track_minutes=30)
