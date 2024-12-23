@@ -47,25 +47,25 @@ def train_xgboost(X_train, y_train, X_test, y_test):
 def train_lstm(X_train, y_train, X_test, y_test):
     scaler_X = MinMaxScaler()
     scaler_y = MinMaxScaler()
-    
+
     X_train_scaled = scaler_X.fit_transform(X_train)
     X_test_scaled = scaler_X.transform(X_test)
-    
+
     y_train_scaled = scaler_y.fit_transform(y_train.values.reshape(-1, 1))
-    
+
     # Reshape data for LSTM [samples, timesteps, features]
     X_train_scaled = np.reshape(X_train_scaled, (X_train_scaled.shape[0], 1, X_train_scaled.shape[1]))
     X_test_scaled = np.reshape(X_test_scaled, (X_test_scaled.shape[0], 1, X_test_scaled.shape[1]))
-    
+
     model = Sequential([
         LSTM(64, input_shape=(1, X_train.shape[1])),
         Dense(32, activation='relu'),
         Dense(1)
     ])
-    
+
     model.compile(optimizer='adam', loss='mse')
     model.fit(X_train_scaled, y_train_scaled, epochs=10, batch_size=32, verbose=1)
-    
+
     predictions_scaled = model.predict(X_test_scaled)
     predictions = scaler_y.inverse_transform(predictions_scaled).flatten()
     return predictions
