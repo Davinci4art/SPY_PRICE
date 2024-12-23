@@ -2,6 +2,9 @@
 import numpy as np
 import pandas as pd
 import yfinance as yf
+import ta
+from scipy.signal import find_peaks
+import seaborn as sns
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
@@ -15,15 +18,27 @@ from sklearn.preprocessing import MinMaxScaler
 # Load Data from Yahoo Finance
 def load_stock_data(ticker, start, end):
     data = yf.download(ticker, start=start, end=end)
+    # Technical indicators
     data['MA50'] = data['Close'].rolling(window=50).mean()
     data['MA200'] = data['Close'].rolling(window=200).mean()
     data['Daily_Return'] = data['Close'].pct_change()
+    data['RSI'] = ta.momentum.RSIIndicator(data['Close'], window=14).rsi()
+    macd = ta.trend.MACD(data['Close'])
+    data['MACD'] = macd.macd()
+    
+    # Detect peaks and troughs
+    peaks, _ = find_peaks(data['Close'], distance=5)
+    troughs, _ = find_peaks(-data['Close'], distance=5)
+    data['Pattern_Label'] = 0
+    for i in peaks: data.iloc[i, data.columns.get_loc('Pattern_Label')] = 1
+    for i in troughs: data.iloc[i, data.columns.get_loc('Pattern_Label')] = 2
+    
     data = data.dropna()
     return data
 
 # Preprocessing
 def preprocess_data(data):
-    features = ['Open', 'High', 'Low', 'Volume', 'MA50', 'MA200', 'Daily_Return']
+    features = ['Open', 'High', 'Low', 'Volume', 'MA50', 'MA200', 'Daily_Return', 'RSI', 'MACD', 'Pattern_Label']
     target = 'Close'
     X = data[features]
     y = data[target]
