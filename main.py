@@ -1,4 +1,6 @@
 # Required Libraries
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Suppress TF warnings
 import numpy as np
 import pandas as pd
 import yfinance as yf
