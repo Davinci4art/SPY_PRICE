@@ -161,8 +161,8 @@ def monitor_live_prices(ticker):
 if __name__ == "__main__":
     # Step 1: Load Historical Data
     ticker = "SPY"  # SPY ETF
-    start_date = "2024-11-01"  # Starting from November 2024
     end_date = pd.Timestamp.now().strftime('%Y-%m-%d')
+    start_date = (pd.Timestamp.now() - pd.Timedelta(days=60)).strftime('%Y-%m-%d')  # Last 60 days
     data = load_stock_data(ticker, start_date, end_date)
     print("\nHistorical Data Preview:")
     print(data.head())
