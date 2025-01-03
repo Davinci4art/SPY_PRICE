@@ -19,7 +19,10 @@ from sklearn.preprocessing import MinMaxScaler
 
 # Load Data from Yahoo Finance
 def load_stock_data(ticker, start, end):
-    data = yf.download(ticker, start=start, end=end)
+    try:
+        data = yf.download(ticker, start=start, end=end)
+        if data.empty:
+            raise ValueError("No data available for the specified date range")
     # Technical indicators
     data['MA50'] = data['Close'].rolling(window=50).mean()
     data['MA200'] = data['Close'].rolling(window=200).mean()
@@ -150,12 +153,18 @@ def plot_results(y_test, predictions, model_name):
 
 # Live Price Monitoring
 def monitor_live_prices(ticker):
-    stock = yf.Ticker(ticker)
-    live_data = stock.history(period='1d', interval='1m')
-    if not live_data.empty:
-        current_price = live_data['Close'].iloc[-1]
-        print(f"Current {ticker} price: ${current_price:.2f}")
-    return live_data
+    try:
+        stock = yf.Ticker(ticker)
+        live_data = stock.history(period='1d', interval='1m')
+        if not live_data.empty:
+            current_price = live_data['Close'].iloc[-1]
+            print(f"Current {ticker} price: ${current_price:.2f}")
+        else:
+            print(f"No current data available for {ticker} (market might be closed)")
+        return live_data
+    except Exception as e:
+        print(f"Error fetching live prices: {e}")
+        return pd.DataFrame()
 
 # Main Function
 if __name__ == "__main__":
