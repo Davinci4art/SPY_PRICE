@@ -23,12 +23,12 @@ def load_stock_data(ticker, start, end):
         data = yf.download(ticker, start=start, end=end)
         if data.empty:
             raise ValueError("No data available for the specified date range")
-            
+        
         # Technical indicators
         data['MA50'] = data['Close'].rolling(window=50).mean()
-    data['MA200'] = data['Close'].rolling(window=200).mean()
-    data['Daily_Return'] = data['Close'].pct_change()
-    data['RSI'] = ta.momentum.RSIIndicator(data['Close'], window=14).rsi()
+        data['MA200'] = data['Close'].rolling(window=200).mean()
+        data['Daily_Return'] = data['Close'].pct_change()
+        data['RSI'] = ta.momentum.RSIIndicator(data['Close'], window=14).rsi()
     macd = ta.trend.MACD(data['Close'])
     data['MACD'] = macd.macd()
     
@@ -44,11 +44,26 @@ def load_stock_data(ticker, start, end):
 
 # Preprocessing
 def preprocess_data(data):
-    features = ['Open', 'High', 'Low', 'Volume', 'MA50', 'MA200', 'Daily_Return', 'RSI', 'MACD', 'Pattern_Label']
-    target = 'Close'
-    X = data[features]
-    y = data[target]
-    return train_test_split(X, y, test_size=0.2, shuffle=False)
+    try:
+        features = ['Open', 'High', 'Low', 'Volume', 'MA50', 'MA200', 'Daily_Return', 'RSI', 'MACD', 'Pattern_Label']
+        target = 'Close'
+        
+        # Validate all required columns exist
+        missing_cols = [col for col in features + [target] if col not in data.columns]
+        if missing_cols:
+            raise ValueError(f"Missing required columns: {missing_cols}")
+            
+        X = data[features]
+        y = data[target]
+        
+        # Check for NaN values
+        if X.isnull().any().any() or y.isnull().any():
+            raise ValueError("Dataset contains missing values after preprocessing")
+            
+        return train_test_split(X, y, test_size=0.2, shuffle=False)
+    except Exception as e:
+        print(f"Error during preprocessing: {str(e)}")
+        raise
 
 # Train Random Forest Model
 def train_random_forest(X_train, y_train, X_test, y_test):
@@ -169,16 +184,27 @@ def monitor_live_prices(ticker):
 
 # Main Function
 if __name__ == "__main__":
-    # Step 1: Load Historical Data
-    ticker = "SPY"  # SPY ETF
-    end_date = pd.Timestamp.now().strftime('%Y-%m-%d')
-    start_date = (pd.Timestamp.now() - pd.Timedelta(days=60)).strftime('%Y-%m-%d')  # Last 60 days
     try:
+        # Step 1: Load Historical Data
+        ticker = "SPY"  # SPY ETF
+        end_date = pd.Timestamp.now().strftime('%Y-%m-%d')
+        start_date = (pd.Timestamp.now() - pd.Timedelta(days=60)).strftime('%Y-%m-%d')  # Last 60 days
+        
+        print(f"\nFetching data for {ticker} from {start_date} to {end_date}")
         data = load_stock_data(ticker, start_date, end_date)
+        
         if len(data) < 10:  # Ensure we have enough data points
             raise ValueError("Insufficient data points for analysis")
-    print("\nHistorical Data Preview:")
-    print(data.head())
+            
+        print("\nHistorical Data Preview:")
+        print(data.head())
+        
+        if data.isnull().any().any():
+            raise ValueError("Dataset contains missing values")
+            
+    except Exception as e:
+        print(f"\nError during data loading: {str(e)}")
+        raise
     
     # Live Price Monitoring
     print("\nLive Price:")
