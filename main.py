@@ -23,8 +23,9 @@ def load_stock_data(ticker, start, end):
         data = yf.download(ticker, start=start, end=end)
         if data.empty:
             raise ValueError("No data available for the specified date range")
-    # Technical indicators
-    data['MA50'] = data['Close'].rolling(window=50).mean()
+            
+        # Technical indicators
+        data['MA50'] = data['Close'].rolling(window=50).mean()
     data['MA200'] = data['Close'].rolling(window=200).mean()
     data['Daily_Return'] = data['Close'].pct_change()
     data['RSI'] = ta.momentum.RSIIndicator(data['Close'], window=14).rsi()
@@ -172,7 +173,10 @@ if __name__ == "__main__":
     ticker = "SPY"  # SPY ETF
     end_date = pd.Timestamp.now().strftime('%Y-%m-%d')
     start_date = (pd.Timestamp.now() - pd.Timedelta(days=60)).strftime('%Y-%m-%d')  # Last 60 days
-    data = load_stock_data(ticker, start_date, end_date)
+    try:
+        data = load_stock_data(ticker, start_date, end_date)
+        if len(data) < 10:  # Ensure we have enough data points
+            raise ValueError("Insufficient data points for analysis")
     print("\nHistorical Data Preview:")
     print(data.head())
     
