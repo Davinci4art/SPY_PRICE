@@ -30,14 +30,14 @@ def load_stock_data(ticker, start, end):
         data['Daily_Return'] = data['Close'].pct_change()
         data['RSI'] = ta.momentum.RSIIndicator(data['Close'], window=14).rsi()
     macd = ta.trend.MACD(data['Close'])
-    data['MACD'] = macd.macd()
-    
-    # Detect peaks and troughs
-    peaks, _ = find_peaks(data['Close'], distance=5)
-    troughs, _ = find_peaks(-data['Close'], distance=5)
-    data['Pattern_Label'] = 0
-    for i in peaks: data.iloc[i, data.columns.get_loc('Pattern_Label')] = 1
-    for i in troughs: data.iloc[i, data.columns.get_loc('Pattern_Label')] = 2
+        data['MACD'] = macd.macd()
+        
+        # Detect peaks and troughs
+        peaks, _ = find_peaks(data['Close'], distance=5)
+        troughs, _ = find_peaks(-data['Close'], distance=5)
+        data['Pattern_Label'] = 0
+        for i in peaks: data.iloc[i, data.columns.get_loc('Pattern_Label')] = 1
+        for i in troughs: data.iloc[i, data.columns.get_loc('Pattern_Label')] = 2
     
     data = data.dropna()
     return data
@@ -187,11 +187,15 @@ if __name__ == "__main__":
     try:
         # Step 1: Load Historical Data
         ticker = "SPY"  # SPY ETF
-        end_date = pd.Timestamp.now().strftime('%Y-%m-%d')
-        start_date = (pd.Timestamp.now() - pd.Timedelta(days=60)).strftime('%Y-%m-%d')  # Last 60 days
+        end_date = pd.Timestamp.now()
+        start_date = end_date - pd.Timedelta(days=60)
         
-        print(f"\nFetching data for {ticker} from {start_date} to {end_date}")
-        data = load_stock_data(ticker, start_date, end_date)
+        # Ensure we're not requesting future data
+        if start_date > end_date:
+            start_date = end_date - pd.Timedelta(days=60)
+            
+        print(f"\nFetching data for {ticker} from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
+        data = load_stock_data(ticker, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
         
         if len(data) < 10:  # Ensure we have enough data points
             raise ValueError("Insufficient data points for analysis")
@@ -214,10 +218,14 @@ if __name__ == "__main__":
     X_train, X_test, y_train, y_test = preprocess_data(data)
 
     # Step 3: Train and Evaluate Models
-    # Random Forest
-    rf_predictions = train_random_forest(X_train, y_train, X_test, y_test)
-    evaluate_model(y_test, rf_predictions, "Random Forest")
-    plot_results(y_test, rf_predictions, "Random Forest")
+    try:
+        # Random Forest
+        print("\nTraining Random Forest model...")
+        rf_predictions = train_random_forest(X_train, y_train, X_test, y_test)
+        evaluate_model(y_test, rf_predictions, "Random Forest")
+        plot_results(y_test, rf_predictions, "Random Forest")
+    except Exception as e:
+        print(f"Error in Random Forest model: {str(e)}")
 
     # XGBoost
     xgb_predictions = train_xgboost(X_train, y_train, X_test, y_test)
